@@ -2,6 +2,7 @@ import paramiko
 from pydantic import BaseModel, Field
 
 # 인스턴스 실행 관리(SSH 연결, 명령 실행)
+# 인스턴스 객체로 관리
 
 class SSHInfo(BaseModel):
     host: str = Field(...)
@@ -39,4 +40,5 @@ class Instance:
             self.close()
         except Exception:
             pass
+
 
