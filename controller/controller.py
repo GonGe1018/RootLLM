@@ -1,5 +1,5 @@
-from instance.instance import Instance
-from instance.instance import SSHInfo
+from instance.manager import Instance
+from instance.manager import SSHInfo
 
 # 인스턴스 컨트롤러
 
