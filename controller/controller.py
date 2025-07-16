@@ -65,8 +65,10 @@ class LLMController:
                     command = self.generate_command()
                     if command:  # 빈 명령이 아닌 경우에만 실행
                         response = self.send_command(command)
+                        print(time.time() - self.start_time, "초 경과")
                         print(f"Command: {command}")
                         print(f"Response: {response}")
+                        print('\n\n\n')
                     time.sleep(1)  # 과도한 API 호출 방지
                 except Exception as e:
                     print(f"Error in session loop: {e}")
