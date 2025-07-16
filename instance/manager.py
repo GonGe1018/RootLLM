@@ -26,6 +26,7 @@ class SSHCommandHistory(BaseModel):
     event: SSHEventType
     error: str
     timestamp: datetime
+    description: str
 
     # 명령 이벤트일 때만 아래 필드 사용
     command: str | None = None
@@ -55,7 +56,8 @@ class InstanceManager:
                 SSHCommandHistory(
                     event=event,
                     error="",
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
+                    description=f"Connected to Instance id:{self.instance_id}"
                 )
             )
             self.create_shell() # 세션 생성
@@ -65,7 +67,8 @@ class InstanceManager:
                 SSHCommandHistory(
                     event=event,
                     error=f"SSH {event.value} failed: {e}",
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
+                    description=f"Failed to {event.value} Instance id:{self.instance_id}"
                 )
             )
             print(f"SSH {event.value} failed: {e}")
@@ -80,7 +83,8 @@ class InstanceManager:
                 SSHCommandHistory(
                     event=SSHEventType.INTERRUPT,
                     error="",
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
+                    description=f"Interrupted command on Instance id:{self.instance_id}"
                 )
             )
             return True
@@ -116,7 +120,8 @@ class InstanceManager:
             SSHCommandHistory(
                 event=SSHEventType.DISCONNECT,
                 error="",
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
+                description=f"Disconnected from Instance id:{self.instance_id}"
             )
         )
 
@@ -147,7 +152,8 @@ class InstanceManager:
                 SSHCommandHistory(
                     event=SSHEventType.SHELL_CREATE,
                     error="",
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
+                    description=f"Created shell for Instance id:{self.instance_id}"
                 )
             )
             return True
@@ -156,7 +162,8 @@ class InstanceManager:
                 SSHCommandHistory(
                     event=SSHEventType.SHELL_CREATE,
                     error=f"Shell creation failed: {e}",
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
+                    description=f"Shell creation failed for Instance id:{self.instance_id}"
                 )
             )
             return False
@@ -196,7 +203,7 @@ class InstanceManager:
                     time.sleep(0.1)  # 중단 신호 처리 대기
                     error_msg = f"Command timed out after {timeout} seconds"
                     self.history.append(
-                        SSHCommandHistory(event=SSHEventType.TIMEOUT_INTERRUPT, command=command, output=output, error=error_msg, timestamp=datetime.now())
+                        SSHCommandHistory(event=SSHEventType.TIMEOUT_INTERRUPT, command=command, output=output, error=error_msg, timestamp=datetime.now(), description=f"Command timed out for Instance id:{self.instance_id}")
                     )
                     return output, error_msg
                 elif self.shell_channel.exit_status_ready():
@@ -222,14 +229,14 @@ class InstanceManager:
             clean_output = '\n'.join(clean_lines).strip()
             
             self.history.append(
-                SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output=clean_output, error="", timestamp=datetime.now())
+                SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output=clean_output, error="", timestamp=datetime.now(), description=f"Executed command on Instance id:{self.instance_id}")
             )
             return clean_output, ""
             
         except Exception as e:
             error_msg = f"Shell command failed: {e}"
             self.history.append(
-                SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output="", error=error_msg, timestamp=datetime.now())
+                SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output="", error=error_msg, timestamp=datetime.now(), description=f"Failed to execute command on Instance id:{self.instance_id}")
             )
             return "", error_msg
 
@@ -242,7 +249,8 @@ class InstanceManager:
                 SSHCommandHistory(
                     event=SSHEventType.SHELL_CLOSE,
                     error="",
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
+                    description=f"Closed shell for Instance id:{self.instance_id}"
                 )
             )
 
