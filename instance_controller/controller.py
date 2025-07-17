@@ -170,7 +170,5 @@ class LLMController:
             print(f"{entry.timestamp} - {entry.event.value}: {entry.command} - {entry.description}")
         
         # LLM을 사용하여 전체 세션 요약
-        summary = self.llm.summarize_history(self.history)
-        print(summary)
-        
+        summary = self.llm.summarize_history(self.history)        
         return summary

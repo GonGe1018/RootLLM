@@ -18,6 +18,7 @@ def main():
     finally:
         if controller:
             summary = controller.summarize_session()
+            print(summary)
 
 
 
