@@ -15,11 +15,12 @@ class Settings(BaseSettings):
 
     system_prompt_path: str
 
+    summary_path: str
+    history_path: str
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
 
 load_dotenv()
 settings = Settings()
-
-print(settings)
