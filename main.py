@@ -1,6 +1,5 @@
 from instance_controller.controller import LLMController
 from core.config import settings
-import json
 import os
 from datetime import datetime
 
@@ -20,11 +19,9 @@ def main():
         print(f"오류 발생: {e}")
     finally:
         if controller:
-            # 결과 저장 디렉토리 생성
             os.makedirs(os.path.dirname(settings.summary_path), exist_ok=True)
             os.makedirs(os.path.dirname(settings.history_path), exist_ok=True)
             
-            # 히스토리 저장 (JSONL 형식)
             try:
                 with open(settings.history_path, 'w', encoding='utf-8') as f:
                     for entry in controller.history:
@@ -33,7 +30,6 @@ def main():
             except Exception as e:
                 print(f"히스토리 저장 실패: {e}")
             
-            # 요약 저장
             try:
                 summary = controller.llm.summarize_history(controller.history)
                 with open(settings.summary_path, 'w', encoding='utf-8') as f:

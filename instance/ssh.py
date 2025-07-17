@@ -165,6 +165,7 @@ class SSHClient:
             output = ""
             start_time = time.time()
             last_line = ""
+            sudo_password_sent = False
             
             while True:
                 if self.shell_channel.recv_ready():
@@ -176,6 +177,14 @@ class SSHClient:
                     if lines:
                         last_line = lines[-1]
                     
+                    # sudo 비밀번호 프롬프트 감지
+                    if not sudo_password_sent and ('[sudo]' in output or 'password' in output.lower() or 'Password:' in output):
+                        # 비밀번호 입력
+                        self.shell_channel.send(self.ssh_info.password + '\n')
+                        sudo_password_sent = True
+                        time.sleep(0.5)  # 비밀번호 처리 대기
+                        continue
+                    
                     # 프롬프트 감지 ($ 로 끝나는 라인)
                     if last_line.strip().endswith('$ ') or last_line.strip().endswith('$'):
                         # 명령 완료로 판단
@@ -186,9 +195,6 @@ class SSHClient:
                     self.shell_channel.send('\x03')
                     time.sleep(0.1)  # 중단 신호 처리 대기
                     error_msg = f"Command timed out after {timeout} seconds"
-                    # self.history.append(
-                    #     SSHCommandHistory(event=SSHEventType.TIMEOUT_INTERRUPT, command=command, output=output, error=error_msg, timestamp=datetime.now(), description=f"Command timed out for Instance id:{self.instance_id}")
-                    # )
                     return output, error_msg
                 elif self.shell_channel.exit_status_ready():
                     break
@@ -206,22 +212,19 @@ class SSHClient:
                 # 프롬프트 라인 스킵
                 elif line.strip().endswith('$ ') or line.strip().endswith('$'):
                     continue
+                # sudo 비밀번호 관련 라인 스킵
+                elif '[sudo]' in line or 'password' in line.lower() or 'Password:' in line:
+                    continue
                 # 빈 라인이 아닌 경우 추가
                 else:
                     clean_lines.append(line)
             
             clean_output = '\n'.join(clean_lines).strip()
             
-            # self.history.append(
-            #     SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output=clean_output, error="", timestamp=datetime.now(), description=f"Executed command on Instance id:{self.instance_id}")
-            # )
             return clean_output, ""
             
         except Exception as e:
             error_msg = f"Shell command failed: {e}"
-            # self.history.append(
-            #     SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output="", error=error_msg, timestamp=datetime.now(), description=f"Failed to execute command on Instance id:{self.instance_id}")
-            # )
             return "", error_msg
 
     def close_shell(self):

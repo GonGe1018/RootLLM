@@ -37,3 +37,18 @@ Internet : connected
 ```
 {history}
 ```
+
+---
+
+응답은 반드시 다음 JSON 형식으로 해주세요
+```json
+{
+    "event": "event 종류",
+    "command": {
+        "content": "실행할 bash 명령어",
+        "timeout": "초 단위 타임아웃"
+    },
+    "description": "이 명령어를 실행하는 이유",
+    "current_plan": "현재 계획"
+}
+```

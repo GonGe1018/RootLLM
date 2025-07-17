@@ -24,6 +24,21 @@ class LLMController:
         self.llm = LLM(settings)
         self.history:list[StepHistory] = []
         
+    def _add_history_with_output(self, history_item: StepHistory):
+        """히스토리 추가 시 출력"""
+        self.history.append(history_item)
+        print(f"[{history_item.timestamp}] {history_item.event.value}")
+        if history_item.command:
+            print(f"  Command: {history_item.command}")
+        if history_item.description:
+            print(f"  Description: {history_item.description}")
+        if history_item.error:
+            print(f"  Error: {history_item.error}")
+        if history_item.output:
+            # 출력이 너무 길면 첫 100자만 출력
+            output_preview = history_item.output[:100] + "..." if len(history_item.output) > 100 else history_item.output
+            print(f"  Output: {output_preview}")
+        print("-" * 50)
 
     def next_step_from_llm(self):
         # 아니 이게 뭐야
@@ -44,7 +59,7 @@ class LLMController:
                 command = data.get('command', {}).get('content', '')
                 timeout = data['command'].get("timeout", 30)
                 output, error_msg = self.instance.send_command_to_shell(command, timeout)
-                self.history.append(
+                self._add_history_with_output(
                     StepHistory(
                         event=EventType.SHELL_COMMAND,
                         error=error_msg,
@@ -59,10 +74,10 @@ class LLMController:
                 res = self.instance.connect()
                 if isinstance(res, StepHistory):
                     res.description = description
-                    self.history.append(res)
+                    self._add_history_with_output(res)
                 else:
                     # bool 값이 반환된 경우
-                    self.history.append(
+                    self._add_history_with_output(
                         StepHistory(
                             event=EventType.CONNECT,
                             error="" if res else "Failed to connect",
@@ -76,9 +91,9 @@ class LLMController:
                 res = self.instance.disconnect()
                 if isinstance(res, StepHistory):
                     res.description = description
-                    self.history.append(res)
+                    self._add_history_with_output(res)
                 else:
-                    self.history.append(
+                    self._add_history_with_output(
                         StepHistory(
                             event=EventType.DISCONNECT,
                             error="" if res else "Failed to disconnect",
@@ -92,9 +107,9 @@ class LLMController:
                 res = self.instance.reconnect()
                 if isinstance(res, StepHistory):
                     res.description = description
-                    self.history.append(res)
+                    self._add_history_with_output(res)
                 else:
-                    self.history.append(
+                    self._add_history_with_output(
                         StepHistory(
                             event=EventType.RECONNECT,
                             error="" if res else "Failed to reconnect",
@@ -108,10 +123,10 @@ class LLMController:
                 res = self.instance.create_shell()
                 if isinstance(res, StepHistory):
                     res.description = description
-                    self.history.append(res)
+                    self._add_history_with_output(res)
                 else:
                     # bool 값이 반환된 경우
-                    self.history.append(
+                    self._add_history_with_output(
                         StepHistory(
                             event=EventType.SHELL_CREATE,
                             error="" if res else "Failed to create shell",
@@ -124,19 +139,19 @@ class LLMController:
             elif event == 'shell_close':
                 res:StepHistory = self.instance.close_shell()
                 res.description = description
-                self.history.append(res)
+                self._add_history_with_output(res)
 
             elif event == 'interrupt':
                 res = self.instance.interrupt_command()
                 res.description = description
-                self.history.append(res)
+                self._add_history_with_output(res)
 
             elif event == 'timeout_interrupt':
                 res = self.instance.interrupt_command()
                 res.event = EventType.TIMEOUT_INTERRUPT
                 res.description = description
                 res.output = "Timeout interrupt triggered by LLM"
-                self.history.append(res)
+                self._add_history_with_output(res)
 
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Error parsing LLM response: {e}")
