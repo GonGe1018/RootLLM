@@ -26,9 +26,9 @@ class LLMController:
         
     def append_history(self, history_item: StepHistory):
 
-        if len(history_item.output) > 1000:
-            # 끝-300~끝 range 추가
-            history_item.output = history_item.output[:1000] + "..."  + history_item.output[-300:]
+        # if len(history_item.output) > 1000:
+        #     # 끝-300~끝 range 추가
+        #     history_item.output = history_item.output[:1000] + "..."  + history_item.output[-300:]
         
         self.history.append(history_item)
         print(f"[{history_item.timestamp}] {history_item.event.value}")
