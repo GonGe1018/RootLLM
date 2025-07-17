@@ -4,17 +4,9 @@ from datetime import datetime
 from enum import Enum
 import time
 
-# 인스턴스 실행 관리(SSH 연결, 명령 실행)
+from core.models import StepHistory, EventType
 
-class SSHEventType(str, Enum):
-    CONNECT = "connect"
-    DISCONNECT = "disconnect"
-    RECONNECT = "reconnect"
-    SHELL_CREATE = "shell_create"
-    SHELL_CLOSE = "shell_close"
-    SHELL_COMMAND = "shell_command"
-    INTERRUPT = "interrupt"
-    TIMEOUT_INTERRUPT = "timeout_interrupt"
+# 인스턴스 실행 관리(SSH 연결, 명령 실행)
 
 class SSHInfo(BaseModel):
     host: str = Field(...)
@@ -22,73 +14,12 @@ class SSHInfo(BaseModel):
     username: str = Field(...)
     password: str = Field(...)
 
-class SSHCommandHistory(BaseModel):
-    event: SSHEventType
-    error: str
-    timestamp: datetime
-    description: str
-
-    # 명령 이벤트일 때만 아래 필드 사용
-    command: str | None = None
-    output: str | None = None
-
-class InstanceManager:
+class SSHClient:
     def __init__(self, instance_id, ssh_info: SSHInfo):
         self.instance_id = instance_id
         self.ssh_info = ssh_info
         self.ssh_client = None
-        self.history:list[SSHCommandHistory] = []
         self.shell_channel = None
-
-    def connect(self, event: SSHEventType = SSHEventType.CONNECT) -> bool:
-        if self.ssh_client is not None:
-            return True
-        self.ssh_client = paramiko.SSHClient()
-        self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        try:
-            self.ssh_client.connect(
-                hostname=self.ssh_info.host,
-                port=self.ssh_info.port,
-                username=self.ssh_info.username,
-                password=self.ssh_info.password
-            )
-            self.history.append(
-                SSHCommandHistory(
-                    event=event,
-                    error="",
-                    timestamp=datetime.now(),
-                    description=f"Connected to Instance id:{self.instance_id}"
-                )
-            )
-            self.create_shell() # 세션 생성
-            return True
-        except paramiko.SSHException as e:
-            self.history.append(
-                SSHCommandHistory(
-                    event=event,
-                    error=f"SSH {event.value} failed: {e}",
-                    timestamp=datetime.now(),
-                    description=f"Failed to {event.value} Instance id:{self.instance_id}"
-                )
-            )
-            print(f"SSH {event.value} failed: {e}")
-            self.ssh_client = None
-            return False
-
-    def interrupt_command(self):
-        """shell 명령 중지(Ctrl+C)"""
-        if self.shell_channel is not None:
-            self.shell_channel.send('\x03')  # Ctrl+C
-            self.history.append(
-                SSHCommandHistory(
-                    event=SSHEventType.INTERRUPT,
-                    error="",
-                    timestamp=datetime.now(),
-                    description=f"Interrupted command on Instance id:{self.instance_id}"
-                )
-            )
-            return True
-        return False
 
     def get_history(self, json: bool = False):
         if json:
@@ -112,25 +43,76 @@ class InstanceManager:
     def is_connected(self) -> bool:
         return self.ssh_client is not None
 
-    def close(self):
+    def connect(self, event: EventType = EventType.CONNECT) -> bool:
+        """EventType.CONNECT"""
+        self.ssh_client = paramiko.SSHClient()
+        self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            self.ssh_client.connect(
+                hostname=self.ssh_info.host,
+                port=self.ssh_info.port,
+                username=self.ssh_info.username,
+                password=self.ssh_info.password
+            )
+            self.create_shell() # 세션 생성
+            return StepHistory(
+                event=EventType.CONNECT,
+                error="",
+                timestamp=datetime.now(),
+                output=f"Connected to Instance id:{self.instance_id}"
+            )
+        
+        except paramiko.SSHException as e:
+            self.ssh_client = None
+
+            return StepHistory(
+                event=event,
+                error=f"SSH {event.value} failed: {e}",
+                timestamp=datetime.now(),
+                output=f"Failed to {event.value} Instance id:{self.instance_id}"
+            )
+
+    def interrupt_command(self):
+        """EventType.INTERRUPT"""
+        if self.shell_channel is not None:
+            self.shell_channel.send('\x03')  # Ctrl+C
+        
+            return StepHistory(
+                event=EventType.INTERRUPT,
+                error="",
+                timestamp=datetime.now(),
+                output=f"Interrupted(Ctrl+C) command on Instance id:{self.instance_id}"
+            )
+        else:
+            return StepHistory(
+                event=EventType.INTERRUPT,
+                error="No active shell to interrupt",
+                timestamp=datetime.now(),
+                output=f"No active shell to interrupt(Ctrl+C) on Instance id:{self.instance_id}"
+            )
+
+    def disconnect(self):
+        """EventType.DISCONNECT"""
         if self.shell_channel is not None:
             self.close_shell()
         self.ssh_client.close()
-        self.history.append(
-            SSHCommandHistory(
-                event=SSHEventType.DISCONNECT,
-                error="",
-                timestamp=datetime.now(),
-                description=f"Disconnected from Instance id:{self.instance_id}"
-            )
+        self.ssh_client = None
+
+        return StepHistory(
+            event=EventType.DISCONNECT,
+            error="",
+            timestamp=datetime.now(),
+            output=f"Disconnected from Instance id:{self.instance_id}"
         )
 
-    def reconnect(self, event: SSHEventType = SSHEventType.RECONNECT) -> bool:
+    def reconnect(self, event: EventType = EventType.RECONNECT) -> StepHistory:
+        """EventType.RECONNECT"""
         self.close()
         result = self.connect()
         return result
-
+    
     def create_shell(self):
+        """EventType.SHELL_CREATE"""
         if self.shell_channel is not None:
             return True
         
@@ -148,27 +130,29 @@ class InstanceManager:
             # 프롬프트가 준비될 때까지 대기
             time.sleep(0.5)
             
-            self.history.append(
-                SSHCommandHistory(
-                    event=SSHEventType.SHELL_CREATE,
-                    error="",
-                    timestamp=datetime.now(),
-                    description=f"Created shell for Instance id:{self.instance_id}"
-                )
+            return StepHistory(
+                event=EventType.SHELL_CREATE,
+                error="",
+                timestamp=datetime.now(),
+                output=f"Created shell for Instance id:{self.instance_id}"
             )
-            return True
+        
         except Exception as e:
-            self.history.append(
-                SSHCommandHistory(
-                    event=SSHEventType.SHELL_CREATE,
-                    error=f"Shell creation failed: {e}",
-                    timestamp=datetime.now(),
-                    description=f"Shell creation failed for Instance id:{self.instance_id}"
-                )
+            return StepHistory(
+                event=EventType.SHELL_CREATE,
+                error=f"Failed to create shell: {e}",
+                timestamp=datetime.now(),
+                output=f"Failed to create shell for Instance id:{self.instance_id}"
             )
-            return False
 
     def send_command_to_shell(self, command: str, timeout: int = 30) -> tuple[str, str]:
+        """
+        EventType.SHELL_COMMAND
+        
+        returns:
+        - output: 명령 실행 결과
+        - error: 오류 메시지 (명령 실행 실패 시)
+        """
         if self.shell_channel is None:
             if not self.create_shell():
                 return "", "Shell not available"
@@ -202,9 +186,9 @@ class InstanceManager:
                     self.shell_channel.send('\x03')
                     time.sleep(0.1)  # 중단 신호 처리 대기
                     error_msg = f"Command timed out after {timeout} seconds"
-                    self.history.append(
-                        SSHCommandHistory(event=SSHEventType.TIMEOUT_INTERRUPT, command=command, output=output, error=error_msg, timestamp=datetime.now(), description=f"Command timed out for Instance id:{self.instance_id}")
-                    )
+                    # self.history.append(
+                    #     SSHCommandHistory(event=SSHEventType.TIMEOUT_INTERRUPT, command=command, output=output, error=error_msg, timestamp=datetime.now(), description=f"Command timed out for Instance id:{self.instance_id}")
+                    # )
                     return output, error_msg
                 elif self.shell_channel.exit_status_ready():
                     break
@@ -228,31 +212,38 @@ class InstanceManager:
             
             clean_output = '\n'.join(clean_lines).strip()
             
-            self.history.append(
-                SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output=clean_output, error="", timestamp=datetime.now(), description=f"Executed command on Instance id:{self.instance_id}")
-            )
+            # self.history.append(
+            #     SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output=clean_output, error="", timestamp=datetime.now(), description=f"Executed command on Instance id:{self.instance_id}")
+            # )
             return clean_output, ""
             
         except Exception as e:
             error_msg = f"Shell command failed: {e}"
-            self.history.append(
-                SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output="", error=error_msg, timestamp=datetime.now(), description=f"Failed to execute command on Instance id:{self.instance_id}")
-            )
+            # self.history.append(
+            #     SSHCommandHistory(event=SSHEventType.SHELL_COMMAND, command=command, output="", error=error_msg, timestamp=datetime.now(), description=f"Failed to execute command on Instance id:{self.instance_id}")
+            # )
             return "", error_msg
 
     def close_shell(self):
-        """shell 세션 종료"""
+        """EventType.SHELL_CLOSE"""
         if self.shell_channel is not None:
             self.shell_channel.close()
             self.shell_channel = None
-            self.history.append(
-                SSHCommandHistory(
-                    event=SSHEventType.SHELL_CLOSE,
-                    error="",
-                    timestamp=datetime.now(),
-                    description=f"Closed shell for Instance id:{self.instance_id}"
-                )
+
+            return StepHistory(
+                event=EventType.SHELL_CLOSE,
+                error="",
+                timestamp=datetime.now(),
+                output=f"Closed shell for Instance id:{self.instance_id}"
             )
+        else:
+            return StepHistory(
+                event=EventType.SHELL_CLOSE,
+                error="No shell to close",
+                timestamp=datetime.now(),
+                output=f"No shell to close for Instance id:{self.instance_id}"
+            )
+            
 
     def __del__(self):
         try:
