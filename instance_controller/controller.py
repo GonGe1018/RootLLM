@@ -1,12 +1,11 @@
 from datetime import datetime
 import time
 import json
-from enum import Enum
-from pydantic import BaseModel, Field
 
 from core.models import StepHistory, EventType
-from instance.ssh import SSHInfo, SSHClient # SSH 클라이언트 모듈 임포트
+from instance.ssh import SSHInfo, SSHClient  # SSH 클라이언트 모듈 임포트
 from instance_controller.llm import LLM
+
 
 class LLMController:
     def __init__(self, settings):
@@ -17,19 +16,19 @@ class LLMController:
             host=settings.ssh_host,
             port=settings.ssh_port,
             username=settings.ssh_username,
-            password=settings.ssh_password
+            password=settings.ssh_password,
         )
         self.instance = SSHClient(settings.experiment_id, self.ssh_info)
         self.instance.connect()
         self.llm = LLM(settings)
-        self.history:list[StepHistory] = []
-        
+        self.history: list[StepHistory] = []
+
     def append_history(self, history_item: StepHistory):
 
         # if len(history_item.output) > 1000:
         #     # 끝-300~끝 range 추가
         #     history_item.output = history_item.output[:1000] + "..."  + history_item.output[-300:]
-        
+
         self.history.append(history_item)
         print(f"[{history_item.timestamp}] {history_item.event.value}")
         if history_item.command:
@@ -39,7 +38,11 @@ class LLMController:
         if history_item.error:
             print(f"  Error: {history_item.error}")
         if history_item.output:
-            output_preview = history_item.output[:100] + "..." if len(history_item.output) > 100 else history_item.output
+            output_preview = (
+                history_item.output[:100] + "..."
+                if len(history_item.output) > 100
+                else history_item.output
+            )
             print(f"  Output: {output_preview}")
         print("-" * 50)
 
@@ -47,18 +50,19 @@ class LLMController:
 
         res = self.llm.generate_response(history=self.history)
 
-        
         try:
             data = json.loads(res)
 
             event = data.get("event")
             description = data.get("description", "")
             error_msg = data.get("error", "")
-            
-            if event == 'shell_command':
-                command = data.get('command', {}).get('content', '')
-                timeout = data['command'].get("timeout", 30)
-                output, error_msg = self.instance.send_command_to_shell(command, timeout)
+
+            if event == "shell_command":
+                command = data.get("command", {}).get("content", "")
+                timeout = data["command"].get("timeout", 30)
+                output, error_msg = self.instance.send_command_to_shell(
+                    command, timeout
+                )
                 self.append_history(
                     StepHistory(
                         event=EventType.SHELL_COMMAND,
@@ -66,11 +70,11 @@ class LLMController:
                         timestamp=datetime.now(),
                         description=description,
                         command=command,
-                        output=output
+                        output=output,
                     )
                 )
 
-            elif event == 'connect':
+            elif event == "connect":
                 res = self.instance.connect()
                 if isinstance(res, StepHistory):
                     res.description = description
@@ -83,11 +87,13 @@ class LLMController:
                             error="" if res else "Failed to connect",
                             timestamp=datetime.now(),
                             description=description,
-                            output="Connected successfully" if res else "Connection failed"
+                            output=(
+                                "Connected successfully" if res else "Connection failed"
+                            ),
                         )
                     )
 
-            elif event == 'disconnect':
+            elif event == "disconnect":
                 res = self.instance.disconnect()
                 if isinstance(res, StepHistory):
                     res.description = description
@@ -99,11 +105,15 @@ class LLMController:
                             error="" if res else "Failed to disconnect",
                             timestamp=datetime.now(),
                             description=description,
-                            output="Disconnected successfully" if res else "Disconnection failed"
+                            output=(
+                                "Disconnected successfully"
+                                if res
+                                else "Disconnection failed"
+                            ),
                         )
                     )
 
-            elif event == 'reconnect':
+            elif event == "reconnect":
                 res = self.instance.reconnect()
                 if isinstance(res, StepHistory):
                     res.description = description
@@ -115,11 +125,15 @@ class LLMController:
                             error="" if res else "Failed to reconnect",
                             timestamp=datetime.now(),
                             description=description,
-                            output="Reconnected successfully" if res else "Reconnection failed"
+                            output=(
+                                "Reconnected successfully"
+                                if res
+                                else "Reconnection failed"
+                            ),
                         )
                     )
 
-            elif event == 'shell_create':
+            elif event == "shell_create":
                 res = self.instance.create_shell()
                 if isinstance(res, StepHistory):
                     res.description = description
@@ -132,21 +146,25 @@ class LLMController:
                             error="" if res else "Failed to create shell",
                             timestamp=datetime.now(),
                             description=description,
-                            output="Shell created successfully" if res else "Failed to create shell"
+                            output=(
+                                "Shell created successfully"
+                                if res
+                                else "Failed to create shell"
+                            ),
                         )
                     )
 
-            elif event == 'shell_close':
-                res:StepHistory = self.instance.close_shell()
+            elif event == "shell_close":
+                res: StepHistory = self.instance.close_shell()
                 res.description = description
                 self.append_history(res)
 
-            elif event == 'interrupt':
+            elif event == "interrupt":
                 res = self.instance.interrupt_command()
                 res.description = description
                 self.append_history(res)
 
-            elif event == 'timeout_interrupt':
+            elif event == "timeout_interrupt":
                 res = self.instance.interrupt_command()
                 res.event = EventType.TIMEOUT_INTERRUPT
                 res.description = description
@@ -182,8 +200,10 @@ class LLMController:
         """
         print("세션 요약:")
         for entry in self.history:
-            print(f"{entry.timestamp} - {entry.event.value}: {entry.command} - {entry.description}")
-        
+            print(
+                f"{entry.timestamp} - {entry.event.value}: {entry.command} - {entry.description}"
+            )
+
         # LLM을 사용하여 전체 세션 요약
-        summary = self.llm.summarize_history(self.history)        
+        summary = self.llm.summarize_history(self.history)
         return summary
