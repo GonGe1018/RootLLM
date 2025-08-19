@@ -248,9 +248,3 @@ class SSHClient:
             )
             
 
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
-
